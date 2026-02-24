@@ -31,7 +31,7 @@ class ProductRepository:
         return db_prod
 
     def delete(self, product_id: UUID):
-        """Supprime un produit de la base"""
+        """Supprime un produit de la base """
         db_prod = self.get_by_id(product_id)
         if db_prod:
             self.session.delete(db_prod)
