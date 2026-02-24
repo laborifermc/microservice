@@ -1,11 +1,9 @@
-from dataclasses import dataclass, field
-from uuid import uuid4, UUID
-from typing import Optional
+from pydantic import BaseModel, Field
+from uuid import UUID, uuid4
 
-@dataclass
-class Product:
+class Product(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
     name: str
     description: str
     category: str
-    id: UUID = field(default_factory=uuid4)
     is_active: bool = True
