@@ -7,3 +7,6 @@ class Product(BaseModel):
     description: str
     category: str
     is_active: bool = True
+
+    class Config:
+        from_attributes = True # Permet de convertir facilement depuis SQLAlchemy
