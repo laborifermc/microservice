@@ -3,18 +3,21 @@ import json
 from domain.models import Product
 from infrastructure.db.repositories import ProductRepository
 from application.dtos import ProductCreateDTO
+from domain.events import ProductCreatedEvent, ProductUpdatedEvent, ProductDeletedEvent
 
 class ProductApplicationService:
-    def __init__(self, uow, mq_channel):
+    def __init__(self, uow, event_dispatcher):
         self.uow = uow
-        self.mq_channel = mq_channel
+        self.event_dispatcher = event_dispatcher
 
     def create_product(self, dto: ProductCreateDTO):
         new_product = Product(name=dto.name, description=dto.description, category=dto.category)
         with self.uow as uow:
             repo = ProductRepository(uow.session)
             repo.add(new_product)
-        self._notify("product.created", {"id": str(new_product.id), "action": "create"})
+
+        event = ProductCreatedEvent(product_id=new_product.id, name=new_product.name)
+        self.event_dispatcher.handle_event(event)
         return new_product
 
     def get_all_products(self):
@@ -46,7 +49,8 @@ class ProductApplicationService:
             repo.update(product_domain)
             
            
-            self._notify("product.updated", {"id": str(product_id), "name": dto.name})
+            event =  ProductUpdatedEvent(product_id=product_id)
+            self.event_dispatcher.handle_event(event)
             
             return product_domain
 
@@ -54,10 +58,7 @@ class ProductApplicationService:
         with self.uow as uow:
             repo = ProductRepository(uow.session)
             if repo.delete(product_id):
-                self._notify("product.deleted", {"id": str(product_id)})
+                event = ProductDeletedEvent(product_id=product_id)
+                self.event_dispatcher.handle_event(event)
                 return True
         return False
-
-    def _notify(self, routing_key, data):
-        if self.mq_channel:
-            self.mq_channel.basic_publish(exchange='product_events', routing_key=routing_key, body=json.dumps(data))
