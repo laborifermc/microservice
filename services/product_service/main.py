@@ -17,48 +17,6 @@ from sqlalchemy.exc import ProgrammingError,OperationalError
 DATABASE_URL = "postgresql://db_user:password@db:5432/product_db"
 engine = create_engine(DATABASE_URL)
 
-
-def bootstrap_databases():
-    """
-    Se connecte à la DB 'postgres' (par défaut) pour créer les autres bases.
-    """
-    # URL de connexion à la base système
-    admin_url = "postgresql://db_user:password@db:5432/postgres"
-    engine = create_engine(admin_url)
-    
-    # Liste des bases à créer
-    databases = ["product_db", "pricing_db", "inventory_db", "customer_db", "order_db"]
-    
-    # On tente de se connecter jusqu'à ce que Postgres soit prêt
-    retries = 10
-    conn = None
-    while retries > 0:
-        try:
-            # Important : on doit être en mode AUTOCOMMIT pour créer une base
-            conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
-            print("[Bootstrap] Connected to PostgreSQL system.")
-            break
-        except OperationalError:
-            retries -= 1
-            print(f"[Bootstrap] Waiting for Postgres... ({retries} left)")
-            time.sleep(2)
-    
-    if not conn:
-        return False
-
-    for db in databases:
-        try:
-            conn.execute(text(f"CREATE DATABASE {db}"))
-            print(f"[Bootstrap] Database '{db}' created successfully.")
-        except ProgrammingError:
-            # Cette erreur arrive si la base existe déjà, on l'ignore proprement
-            print(f"[Bootstrap] Database '{db}' already exists, skipping.")
-        except Exception as e:
-            print(f"[Bootstrap] Error creating '{db}': {e}")
-            
-    conn.close()
-    return True
-
 def connect_db():
     retries = 10
     while retries > 0:
@@ -136,6 +94,6 @@ def start_responder():
                 socket.send_json({"error": str(e)})
 
 if __name__ == "__main__":
-    if bootstrap_databases():
-        if connect_db():
-            start_responder()
+
+    if connect_db():
+        start_responder()

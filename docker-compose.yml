@@ -6,45 +6,69 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-
   db:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: db_user
       POSTGRES_PASSWORD: password
-      # On définit les bases à créer via une variable personnalisée lue par notre script
-      POSTGRES_MULTIPLE_DATABASES: product_db,pricing_db,inventory_db,customer_db,order_db
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U db_user -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    build: ./db_init
+    depends_on:
+      db:
+        condition: service_healthy
 
   product-service:
     build: ./services/product_service
-    depends_on: [db]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/product_db
   
   pricing-service:
     build: ./services/pricing_service
-    depends_on: [db]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/pricing_db
 
   inventory-service:
     build: ./services/inventory_service
-    depends_on: [db]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/inventory_db
   
   gateway-service:
     build: ./services/gateway_service
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     ports: ["8000:8000"]
+
 
   customer-service:
     build: ./services/customer_service
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment: [DATABASE_URL=postgresql://db_user:password@db:5432/customer_db]
     # Ports ZMQ: 5558 (REP pour Gateway), 5559 (PUB pour events)
 
   order-service:
     build: ./services/order_service
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment: [DATABASE_URL=postgresql://db_user:password@db:5432/order_db]
     # Ports ZMQ: 5560 (REP pour Gateway), 5561 (PUB pour events)
