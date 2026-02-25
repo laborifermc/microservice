@@ -20,33 +20,33 @@ services:
       - "5432:5432"
 
   product-service:
-    build: ./services/Product-service
+    build: ./services/product_service
     depends_on: [db]
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/product_db
   
   pricing-service:
-    build: ./services/pricing-service
+    build: ./services/pricing_service
     depends_on: [db]
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/pricing_db
 
   inventory-service:
-    build: ./services/inventory-service
+    build: ./services/inventory_service
     depends_on: [db]
     environment:
       DATABASE_URL: postgresql://db_user:password@db:5432/inventory_db
   
   gateway-service:
-    build: ./services/gateway-service
+    build: ./services/gateway_service
     ports: ["8000:8000"]
 
   customer-service:
-    build: ./services/customer-service
+    build: ./services/customer_service
     environment: [DATABASE_URL=postgresql://db_user:password@db:5432/customer_db]
     # Ports ZMQ: 5558 (REP pour Gateway), 5559 (PUB pour events)
 
   order-service:
-    build: ./services/order-service
+    build: ./services/order_service
     environment: [DATABASE_URL=postgresql://db_user:password@db:5432/order_db]
     # Ports ZMQ: 5560 (REP pour Gateway), 5561 (PUB pour events)
