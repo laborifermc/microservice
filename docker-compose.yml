@@ -14,8 +14,6 @@ services:
       POSTGRES_PASSWORD: password
       # On définit les bases à créer via une variable personnalisée lue par notre script
       POSTGRES_MULTIPLE_DATABASES: product_db,pricing_db,inventory_db,customer_db,order_db
-    volumes:
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     ports:
       - "5432:5432"
 
