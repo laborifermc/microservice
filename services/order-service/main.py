@@ -6,9 +6,26 @@ from infrastructure.db.models import Base
 from infrastructure.db.uows import UnitOfWork
 from infrastructure.db.repositories import OrderRepository
 from domain.models import Order
+from sqlalchemy.exc import OperationalError
 
 DATABASE_URL = "postgresql://db_user:password@db:5432/order_db"
 engine = create_engine(DATABASE_URL)
+def connect_db():
+    retries = 10
+    while retries > 0:
+        try:
+            print(f"Attempting to connect to DB... ({retries} retries left)")
+            Base.metadata.create_all(bind=engine)
+            print("Successfully connected to DB and created tables!")
+            return True
+        except OperationalError:
+            retries -= 1
+            time.sleep(2)  # Attendre 2 secondes avant de réessayer
+    return False
+
+if not connect_db():
+    print("Could not connect to DB. Exiting.")
+    exit(1)
 session_factory = sessionmaker(bind=engine)
 
 def start_order_responder():
@@ -45,6 +62,7 @@ def start_order_responder():
                 responder.send_json(json.loads(new_order.model_dump_json()))
 
 if __name__ == "__main__":
-    time.sleep(5) # Attente sécu DB
-    Base.metadata.create_all(bind=engine)
-    start_order_responder()
+    
+    if connect_db():
+        Base.metadata.create_all(bind=engine)
+        start_order_responder()

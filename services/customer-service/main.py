@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from uuid import UUID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
+import time
 
 from infrastructure.db.models import Base
 from infrastructure.db.uows import UnitOfWork

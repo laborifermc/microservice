@@ -1,5 +1,6 @@
 import zmq
 import json
+import time
 from uuid import UUID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,6 +10,7 @@ from infrastructure.db.uows import UnitOfWork
 from infrastructure.messaging.zmq_publisher import ZmqPublisher
 from application.services import ProductApplicationService
 from application.dtos import ProductCreateDTO
+from sqlalchemy.exc import OperationalError
 
 # --- CONFIGURATION DB ---
 DATABASE_URL = "postgresql://db_user:password@db:5432/product_db"
