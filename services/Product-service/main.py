@@ -1,52 +1,94 @@
-import pika
-from fastapi import FastAPI, HTTPException
+import zmq
+import json
 from uuid import UUID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from infrastructure.db.models import Base
 from infrastructure.db.uows import UnitOfWork
+from infrastructure.messaging.zmq_publisher import ZmqPublisher
 from application.services import ProductApplicationService
 from application.dtos import ProductCreateDTO
 
-app = FastAPI()
+# --- CONFIGURATION DB ---
+DATABASE_URL = "postgresql://db_user:password@db:5432/product_db"
+engine = create_engine(DATABASE_URL)
 
-# Database Setup
-engine = create_engine("postgresql://user:password@db:5432/product_db")
+def connect_db():
+    retries = 10
+    while retries > 0:
+        try:
+            print(f"Attempting to connect to DB... ({retries} retries left)")
+            Base.metadata.create_all(bind=engine)
+            print("Successfully connected to DB and created tables!")
+            return True
+        except OperationalError:
+            retries -= 1
+            time.sleep(2)  # Attendre 2 secondes avant de réessayer
+    return False
+
+if not connect_db():
+    print("Could not connect to DB. Exiting.")
+    exit(1)
+
+
 Base.metadata.create_all(bind=engine)
 session_factory = sessionmaker(bind=engine)
 
-# RabbitMQ Setup (On ignore les erreurs si MQ n'est pas prêt pour l'exemple)
-try:
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
-    channel = connection.channel()
-    channel.exchange_declare(exchange='product_events', exchange_type='topic')
-except:
-    channel = None
+# --- SERVICES ---
+# Publisher pour les événements (ProductCreatedEvent...) vers Pricing/Inventory
+zmq_publisher = ZmqPublisher(port=5555)
 
-def get_service():
-    return ProductApplicationService(UnitOfWork(session_factory), channel)
+def get_product_service():
+    uow = UnitOfWork(session_factory)
+    return ProductApplicationService(uow, event_dispatcher=zmq_publisher)
 
-@app.post("/products")
-def create(data: ProductCreateDTO):
-    return get_service().create_product(data)
+# --- SERVEUR ZMQ REP (Répondeur pour la Gateway) ---
+def start_responder():
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+    socket.bind("tcp://*:5554")
+    
+    service = get_product_service()
+    print("[Product-Service] ZMQ Responder ready on port 5554 (Waiting for Gateway...)")
+    
+    if connect_db():
+        while True:
+            # Attente d'une requête de la Gateway
+            request = socket.recv_json()
+            action = request.get("action")
+            
+            try:
+                if action == "create":
+                    dto = ProductCreateDTO(**request["data"])
+                    product = service.create_product(dto)
+                    socket.send_json(json.loads(product.model_dump_json()))
 
-@app.get("/products")
-def list_all():
-    return get_service().get_all_products()
+                elif action == "get_one":
+                    product_id = UUID(request["id"])
+                    product = service.get_product(product_id)
+                    if product:
+                        socket.send_json(json.loads(product.model_dump_json()))
+                    else:
+                        socket.send_json({"error": "not_found"})
 
-@app.get("/products/{id}")
-def get_one(id: UUID):
-    prod = get_service().get_product(id)
-    if not prod: raise HTTPException(status_code=404)
-    return prod
+                elif action == "update":
+                    product_id = UUID(request["id"])
+                    dto = ProductCreateDTO(**request["data"])
+                    product = service.update_product(product_id, dto)
+                    socket.send_json(product.model_dump() if product else {"error": "not_found"})
 
-@app.put("/products/{id}")
-def update(id: UUID, data: ProductCreateDTO):
-    prod = get_service().update_product(id, data)
-    if not prod: raise HTTPException(status_code=404)
-    return prod
+                elif action == "delete":
+                    product_id = UUID(request["id"])
+                    success = service.delete_product(product_id)
+                    socket.send_json({"status": "success" if success else "failed"})
 
-@app.delete("/products/{id}")
-def delete(id: UUID):
-    if not get_service().delete_product(id): raise HTTPException(status_code=404)
-    return {"status": "deleted"}
+                else:
+                    socket.send_json({"error": "Unknown action"})
+
+            except Exception as e:
+                print(f"Error processing request: {e}")
+                socket.send_json({"error": str(e)})
+
+if __name__ == "__main__":
+    start_responder()

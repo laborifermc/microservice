@@ -1,29 +1,52 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: product_db
-    ports:
-      - "5432:5432"
-
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
       - "5672:5672"
       - "15672:15672"
 
-  product-service:
-    build:
-      context: ./services/Product-service  # Le dossier du projet
-      dockerfile: Dockerfile              # Le nom du fichier
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - rabbitmq
+  db:
+    image: postgres:15-alpine
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/product_db
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: password
+      # On définit les bases à créer via une variable personnalisée lue par notre script
+      POSTGRES_MULTIPLE_DATABASES: product_db,pricing_db,inventory_db,customer_db,order_db
+    volumes:
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    ports:
+      - "5432:5432"
+
+  product-service:
+    build: ./services/Product-service
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgresql://db_user:password@db:5432/product_db
+  
+  pricing-service:
+    build: ./services/pricing-service
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgresql://db_user:password@db:5432/pricing_db
+
+  inventory-service:
+    build: ./services/inventory-service
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgresql://db_user:password@db:5432/inventory_db
+  
+  gateway-service:
+    build: ./services/gateway-service
+    ports: ["8000:8000"]
+
+  customer-service:
+    build: ./services/customer-service
+    environment: [DATABASE_URL=postgresql://db_user:password@db:5432/customer_db]
+    # Ports ZMQ: 5558 (REP pour Gateway), 5559 (PUB pour events)
+
+  order-service:
+    build: ./services/order-service
+    environment: [DATABASE_URL=postgresql://db_user:password@db:5432/order_db]
+    # Ports ZMQ: 5560 (REP pour Gateway), 5561 (PUB pour events)
