@@ -16,4 +16,5 @@ if [ -n "$POSTGRES_MULTIPLE_DATABASES" ]; then
         create_user_and_database $db
     done
     echo "All databases created!"
+	
 fi
